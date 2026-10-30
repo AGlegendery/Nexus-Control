@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% set page_title = "Direct Shell - " + agent.hostname %}
+
+{% block content %}
+<section class="card">
+  <div class="card-header">
+    <h2>Direct Shell Execute</h2>
+    <div class="agent-info">
+      <span class="chip">{{ agent.hostname }}</span>
+      <span class="chip chip-{{ agent.status }}">{{ agent.status }}</span>
+      <span class="muted">{{ agent.os_family }}</span>
+    </div>
+  </div>
+
+  <div class="shell-panel">
+    <label class="label" for="shellCommand">Command</label>
+    <textarea
+      id="shellCommand"
+      class="input mono shell-command-input"
+      rows="4"
+      placeholder="Type a command to run once on this agent..."
+      autofocus
+    ></textarea>
+
+    <div class="shell-actions">
+      <button class="btn btn-primary" id="executeBtn" type="button">Execute</button>
+      <button class="btn btn-outline" id="clearBtn" type="button">Clear Logs</button>
+      <button class="btn btn-outline" id="copyBtn" type="button">Copy Logs</button>
+      <a class="btn btn-outline" href="{{ url_for('agent_detail', agent_id=agent.agent_id) }}">Back to Agent</a>
+    </div>
+  </div>
+
+  <div class="shell-log-card">
+    <div class="shell-log-head">
+      <strong>Execution Logs</strong>
+      <span class="muted" id="taskStatus">Idle</span>
+    </div>
+    <pre class="shell-log" id="shellLog">No command executed yet.</pre>
+  </div>
+</section>
+
+<script>
+  const agentId = {{ agent.agent_id|tojson }};
+  const csrfToken = {{ csrf_token()|tojson }};
+  const commandInput = document.getElementById("shellCommand");
+  const executeBtn = document.getElementById("executeBtn");
+  const clearBtn = document.getElementById("clearBtn");
+  const copyBtn = document.getElementById("copyBtn");
+  const shellLog = document.getElementById("shellLog");
+  const taskStatus = document.getElementById("taskStatus");
+  let pollTimer = null;
+  let currentCommand = "";
+  let commandHistory = [];
+  let historyIndex = -1;
+  const MAX_POLL_MS = 10 * 60 * 1000;
+  let pollStartedAt = 0;
+
+  function setBusy(isBusy) {
+    executeBtn.disabled = isBusy;
+    commandInput.disabled = isBusy;
+  }
+
+  function renderLog(task) {
+    const chunks = task.output_chunks || [];
+    const liveOutput = chunks
+      .filter((chunk) => chunk.stream === "stdout")
+      .sort((left, right) => left.sequence - right.sequence)
+      .map((chunk) => chunk.text)
+      .join("");
+    const liveError = chunks
+      .filter((chunk) => chunk.stream === "stderr")
+      .sort((left, right) => left.sequence - right.sequence)
+      .map((chunk) => chunk.text)
+      .join("");
+    const output = liveOutput || task.output || "";
+    const error = liveError || task.error || "";
+    const parts = [];
+
+    parts.push(`$ ${currentCommand || task.value}`);
+    parts.push("");
+    if (output) {
+      parts.push("[stdout]");
+      parts.push(output.trimEnd());
+    }
+    if (error) {
+      if (output) parts.push("");
+      parts.push("[stderr]");
+      parts.push(error.trimEnd());
+    }
+    if (!output && !error && ["completed", "failed", "killed", "cancelled"].includes(task.status)) {
+      parts.push("Command finished with no output.");
+    }
+
+    shellLog.textContent = parts.join("\n");
+  }
+
+  async function pollTask(taskId) {
+    const response = await fetch(`/api/shell_task/${taskId}`);
+    if (!response.ok) {
+      throw new Error("Could not read execution logs");
+    }
+
+    const task = await response.json();
+    taskStatus.textContent = task.status;
+    if ((task.output_chunks && task.output_chunks.length) || ["completed", "failed", "killed", "cancelled"].includes(task.status)) {
+      renderLog(task);
+    }
+
+    if (["completed", "failed", "killed", "cancelled"].includes(task.status)) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      setBusy(false);
+      renderLog(task);
+      commandInput.focus();
+    }
+  }
+
+  async function executeCommand() {
+    const command = commandInput.value.trim();
+    if (!command) {
+      shellLog.textContent = "Type a command before executing.";
+      return;
+    }
+
+    currentCommand = command;
+    if (commandHistory[commandHistory.length - 1] !== command) {
+      commandHistory.push(command);
+    }
+    historyIndex = commandHistory.length;
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+
+    setBusy(true);
+    taskStatus.textContent = "Queued";
+    shellLog.textContent = `$ ${command}\n\nWaiting for the agent to execute...`;
+
+    try {
+      const response = await fetch(`/api/shell_execute/${agentId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+        body: JSON.stringify({ command })
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "Failed to queue command");
+      }
+
+      const data = await response.json();
+      taskStatus.textContent = "Pending";
+      pollStartedAt = Date.now();
+      pollTimer = setInterval(() => {
+        if (Date.now() - pollStartedAt > MAX_POLL_MS) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          setBusy(false);
+          taskStatus.textContent = "Stopped waiting";
+          shellLog.textContent += "\n\n[client] Gave up polling after 10 minutes. The task may still be running on the agent.";
+          return;
+        }
+        pollTask(data.task_id).catch((error) => {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          setBusy(false);
+          taskStatus.textContent = "Error";
+          shellLog.textContent = error.message;
+        });
+      }, 1000);
+      await pollTask(data.task_id);
+    } catch (error) {
+      setBusy(false);
+      taskStatus.textContent = "Error";
+      shellLog.textContent = error.message;
+    }
+  }
+
+  executeBtn.addEventListener("click", executeCommand);
+  commandInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      executeCommand();
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (commandHistory.length) {
+        historyIndex = Math.max(0, historyIndex - 1);
+        commandInput.value = commandHistory[historyIndex] || "";
+      }
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (commandHistory.length) {
+        historyIndex = Math.min(commandHistory.length, historyIndex + 1);
+        commandInput.value = commandHistory[historyIndex] || "";
+      }
+    }
+  });
+  clearBtn.addEventListener("click", () => {
+    const wasPolling = Boolean(pollTimer);
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      setBusy(false);
+    }
+    taskStatus.textContent = wasPolling ? "Polling stopped" : "Idle";
+    shellLog.textContent = "No command executed yet.";
+  });
+  copyBtn.addEventListener("click", async () => {
+    const text = shellLog.textContent;
+    const originalText = copyBtn.textContent;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const helper = document.createElement("textarea");
+        helper.value = text;
+        document.body.appendChild(helper);
+        helper.select();
+        document.execCommand("copy");
+        helper.remove();
+      }
+      copyBtn.textContent = "Copied!";
+    } catch (error) {
+      copyBtn.textContent = "Copy failed";
+    }
+    setTimeout(() => {
+      copyBtn.textContent = originalText;
+    }, 1500);
+  });
+
+  window.addEventListener("pagehide", () => {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  });
+</script>
+
+<style>
+  .shell-panel {
+    display: grid;
+    gap: 12px;
+    margin: 20px 0;
+  }
+
+  .shell-command-input {
+    min-height: 110px;
+    resize: vertical;
+  }
+
+  .shell-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .shell-log-card {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .shell-log-head {
+    align-items: center;
+    background: rgba(0, 0, 0, 0.22);
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 14px;
+  }
+
+  .shell-log {
+    background: #07100d;
+    color: #d7ffe6;
+    font-family: "Courier New", monospace;
+    font-size: 14px;
+    line-height: 1.55;
+    margin: 0;
+    min-height: 360px;
+    overflow: auto;
+    padding: 16px;
+    white-space: pre-wrap;
+  }
+
+  .agent-info {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+  }
+
+  .chip-online {
+    background: #4CAF50;
+    color: white;
+  }
+
+  .chip-offline {
+    background: #f44336;
+    color: white;
+  }
+</style>
+{% endblock %}

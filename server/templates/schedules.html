@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% set page_title = "Schedules - Control Nexus" %}
+
+{% block content %}
+<section class="card glass-card reveal">
+  <div class="card-h">Scheduled Tasks</div>
+  <p class="muted">Run a script or command on one agent or an agent group at a fixed interval.</p>
+</section>
+
+<section class="layout-2 reveal-delay">
+  <article class="card glass-card">
+    <div class="card-h">Create Schedule</div>
+    <form action="{{ url_for('schedules') }}" method="post" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label class="label">Name</label>
+      <input class="input" name="name" placeholder="Nightly health check" required />
+      <label class="label">Target Type</label>
+      <select class="input" id="schedule-target-type" name="target_type">
+        <option value="agent">Single agent</option>
+        <option value="group">Agent group</option>
+      </select>
+      <label class="label">Target</label>
+      <select class="input" id="schedule-target-id" name="target_id" required>
+        <optgroup label="Agents">
+          {% for agent in agents %}<option value="{{ agent.agent_id }}" data-target-kind="agent">{{ agent.hostname }}</option>{% else %}<option value="" data-target-kind="agent" disabled>No agents registered</option>{% endfor %}
+        </optgroup>
+        <optgroup label="Groups">
+          {% for group in groups %}<option value="{{ group.group_id }}" data-target-kind="group">{{ group.name }} (group)</option>{% else %}<option value="" data-target-kind="group" disabled>No groups defined</option>{% endfor %}
+        </optgroup>
+      </select>
+      <label class="label">Task Type</label>
+      <select class="input" name="task_type">
+        <option value="run_script">Run script library item</option>
+        <option value="deploy_script">Transfer file script</option>
+        <option value="run_agent_file">Run existing agent file</option>
+        <option value="execute_shell">Run command</option>
+      </select>
+      <label class="label">Script ID, agent file, or command</label>
+      <input class="input mono" name="task_value" placeholder="maintenance_script" required />
+      <label class="label">Interval in Minutes</label>
+      <input class="input" name="interval_minutes" type="number" min="1" max="10080" value="60" required />
+      <label class="label">Timeout in Seconds</label>
+      <input class="input" name="timeout_seconds" type="number" min="0" max="86400" value="180" required />
+      <label class="label checkbox-row"><input type="checkbox" name="allow_nonzero_success" /> Accept non-zero exit codes</label>
+      <button class="btn btn-primary" type="submit">Create Schedule</button>
+    </form>
+  </article>
+
+  <article class="card glass-card">
+    <div class="card-h">Schedule Notes</div>
+    <p class="muted">The scheduler runs in the server process. A schedule claims its next run atomically, so duplicate workers will not dispatch the same interval twice.</p>
+    <p class="muted">Group schedules create one task per current group member. Removing an agent from a group affects the next interval.</p>
+  </article>
+</section>
+
+<section class="card glass-card reveal-delay-2">
+  <div class="card-h">Configured Schedules</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Target</th><th>Task</th><th>Every</th><th>Next Run</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for schedule in schedules %}
+        <tr>
+          <td>{{ schedule.name }}</td>
+          <td>{{ schedule.group_name or schedule.agent_hostname or schedule.target_id }}</td>
+          <td><code>{{ schedule.task_type }}: {{ schedule.task_value }}</code></td>
+          <td>{{ schedule.interval_minutes }} min</td>
+          <td class="muted">{{ schedule.next_run_at }}</td>
+          <td><span class="pill {{ 'pill-online' if schedule.enabled else 'pill-offline' }}">{{ 'enabled' if schedule.enabled else 'disabled' }}</span></td>
+          <td class="btn-row">
+            <form action="{{ url_for('run_schedule_now', schedule_id=schedule.schedule_id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><button class="btn btn-small btn-primary" type="submit">Run now</button></form>
+            <form action="{{ url_for('toggle_schedule', schedule_id=schedule.schedule_id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><button class="btn btn-small btn-outline" type="submit">{{ 'Disable' if schedule.enabled else 'Enable' }}</button></form>
+            <form action="{{ url_for('delete_schedule', schedule_id=schedule.schedule_id) }}" method="post" onsubmit="return confirm('Delete this schedule?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><button class="btn btn-small btn-danger" type="submit">Delete</button></form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No schedules configured.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

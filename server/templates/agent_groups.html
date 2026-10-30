@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% set page_title = "Agent Groups - Control Nexus" %}
+
+{% block content %}
+<section class="card glass-card reveal">
+  <div class="card-h">Agent Groups</div>
+  <p class="muted">Group agents by role, location, or maintenance window and dispatch work to the whole group.</p>
+</section>
+
+<section class="layout-2 reveal-delay">
+  <article class="card glass-card">
+    <div class="card-h">Create Group</div>
+    <form action="{{ url_for('agent_groups') }}" method="post" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label class="label">Name</label>
+      <input class="input" name="name" placeholder="Production Windows" required />
+      <label class="label">Description</label>
+      <textarea class="input" name="description" rows="3" placeholder="What this group is used for"></textarea>
+      <button class="btn btn-primary" type="submit">Create Group</button>
+    </form>
+  </article>
+  <article class="card glass-card">
+    <div class="card-h">Group Membership</div>
+    {% for group in groups %}
+    <form action="{{ url_for('update_group_members', group_id=group.group_id) }}" method="post" class="form-grid membership-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <input type="hidden" name="action" value="add" />
+      <strong>{{ group.name }}</strong>
+      <span class="muted">{{ group.member_count }} member{{ '' if group.member_count == 1 else 's' }}</span>
+      <select class="input" name="agent_id" required>
+        <option value="">Add agent</option>
+        {% for agent in agents %}<option value="{{ agent.agent_id }}">{{ agent.hostname }} ({{ agent.status }})</option>{% endfor %}
+      </select>
+      <button class="btn btn-small btn-primary" type="submit">Add</button>
+    </form>
+    <form action="{{ url_for('delete_agent_group', group_id=group.group_id) }}" method="post" onsubmit="return confirm('Delete this group?');" class="group-delete-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <button class="btn btn-small btn-danger" type="submit">Delete group</button>
+    </form>
+    {% else %}
+    <div class="empty">Create a group to start organizing agents.</div>
+    {% endfor %}
+  </article>
+</section>
+
+<section class="card glass-card reveal-delay-2">
+  <div class="card-h">Members</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Group</th><th>Agent</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for group in groups %}
+          {% for agent_id in memberships.get(group.group_id, []) %}
+          <tr>
+            <td>{{ group.name }}</td>
+            <td><code>{{ agent_id }}</code></td>
+            <td><form action="{{ url_for('update_group_members', group_id=group.group_id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><input type="hidden" name="action" value="remove" /><input type="hidden" name="agent_id" value="{{ agent_id }}" /><button class="btn btn-small btn-danger" type="submit">Remove</button></form></td>
+          </tr>
+          {% endfor %}
+        {% else %}
+        <tr><td colspan="3" class="empty">No groups configured.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

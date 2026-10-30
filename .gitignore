@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.bak
+
+# Local data and secrets
+.env
+server/control.db*
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+server/tasks/
+agent/agent_state.json
+agent/scripts/
+*.log
+
+# Build artifacts
+build/
+dist/
+*.spec
+.qoder/
+.DS_Store

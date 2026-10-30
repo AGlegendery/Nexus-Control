@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="stats-grid reveal">
+  <article class="card stat-card">
+    <div class="stat-k">Agents</div>
+    <div class="stat-v">{{ agents|length }}</div>
+  </article>
+  <article class="card stat-card">
+    <div class="stat-k">Scripts</div>
+    <div class="stat-v">{{ script_count }}</div>
+  </article>
+  <article class="card stat-card">
+    <div class="stat-k">Health Alerts</div>
+    <div class="stat-v">{{ open_alerts }}</div>
+  </article>
+  <article class="card stat-card">
+    <div class="stat-k">Pending</div>
+    <div class="stat-v">{{ task_stats.get('pending', 0) }}</div>
+  </article>
+  <article class="card stat-card">
+    <div class="stat-k">Running</div>
+    <div class="stat-v">{{ task_stats.get('running', 0) }}</div>
+  </article>
+  <article class="card stat-card">
+    <div class="stat-k">Completed</div>
+    <div class="stat-v">{{ task_stats.get('completed', 0) }}</div>
+  </article>
+</section>
+
+<section class="card glass-card reveal-delay" data-filter-root>
+  <div class="card-head-row">
+    <div>
+      <div class="card-h">Agents</div>
+      <p class="hint">Select an agent to run scripts, open a direct shell, or inspect its task history.</p>
+    </div>
+    <div class="toolbar">
+      <input class="input input-search" type="search" placeholder="Search host, ID, or OS..." data-filter-text aria-label="Search agents" />
+      <select class="input input-compact" data-filter-attr="status" aria-label="Filter agents by status">
+        <option value="">All statuses</option>
+        <option value="online">Online</option>
+        <option value="offline">Offline</option>
+      </select>
+      <span class="live-badge" id="agents-live-badge" title="Agent status refreshes automatically">Live</span>
+      <a class="btn btn-small btn-outline" href="{{ url_for('health_page') }}">Health</a>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table data-live-agents-url="{{ url_for('list_agents') }}">
+      <thead>
+        <tr>
+          <th>Host</th>
+          <th>OS</th>
+          <th>Status</th>
+          <th>Last Seen</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for agent in agents %}
+        <tr
+          data-filter-row
+          data-agent-id="{{ agent.agent_id }}"
+          data-status="{{ agent.status }}"
+          data-search="{{ (agent.hostname ~ ' ' ~ agent.agent_id ~ ' ' ~ (agent.os_family or '') ~ ' ' ~ (agent.platform or ''))|lower }}"
+        >
+          <td>
+            <a class="row-title" href="{{ url_for('agent_detail', agent_id=agent.agent_id) }}">{{ agent.hostname }}</a>
+            <div class="row-sub"><code>{{ agent.agent_id }}</code></div>
+          </td>
+          <td>
+            <span>{{ agent.os_family or '-' }}</span>
+            <div class="row-sub">{{ agent.platform or 'Waiting for heartbeat' }}</div>
+          </td>
+          <td><span class="pill pill-{{ agent.status }}" data-agent-field="status">{{ agent.status }}</span></td>
+          <td class="muted" data-agent-field="last_seen" data-ts="{{ agent.last_seen or '' }}">{{ agent.last_seen or '-' }}</td>
+          <td>
+            <div class="row-actions">
+              <a class="btn btn-small btn-primary" href="{{ url_for('agent_detail', agent_id=agent.agent_id) }}">Open</a>
+              <button class="btn btn-small btn-outline" type="button" data-agent-refresh="{{ agent.agent_id }}" title="Refresh this agent's status">Refresh</button>
+              {% if can('shell.execute') %}
+              <a class="btn btn-small btn-outline" href="{{ url_for('shell_page', agent_id=agent.agent_id) }}">Shell</a>
+              {% endif %}
+              {% if can('agent.manage') %}
+              <form action="{{ url_for('delete_agent', agent_id=agent.agent_id) }}" method="post" onsubmit="return confirm('Delete this agent and its tasks?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button class="btn btn-small btn-danger" type="submit">Delete</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="empty">
+            No agents registered yet. Start the agent with the server URL and registration token to connect a host.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint filter-empty" data-filter-empty hidden>No agents match the current filter.</p>
+</section>
+
+<section class="card glass-card reveal-delay-2" data-filter-root>
+  <div class="card-head-row">
+    <div>
+      <div class="card-h">Recent Tasks</div>
+      <p class="hint">Task execution is started from an agent page. This view is read-only apart from kill and retry.</p>
+    </div>
+    <div class="toolbar">
+      <input class="input input-search" type="search" placeholder="Search task, agent, type, or value..." data-filter-text aria-label="Search tasks" />
+      <select class="input input-compact" data-filter-attr="status" aria-label="Filter tasks by status">
+        <option value="">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="running">Running</option>
+        <option value="completed">Completed</option>
+        <option value="failed">Failed</option>
+        <option value="killed">Killed</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+      {% if can('schedule.manage') %}
+      <a class="btn btn-small btn-outline" href="{{ url_for('schedules') }}">Schedules</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Task</th>
+          <th>Agent</th>
+          <th>Type</th>
+          <th>Value</th>
+          <th>Status</th>
+          <th>Source</th>
+          <th>Attempt</th>
+          <th>Created</th>
+          <th>Control</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in tasks %}
+        <tr
+          data-filter-row
+          data-status="{{ task.status }}"
+          data-search="{{ (task.task_id ~ ' ' ~ (task.agent_hostname or task.agent_id) ~ ' ' ~ task.type ~ ' ' ~ task.value ~ ' ' ~ task.status)|lower }}"
+        >
+          <td>
+            <button class="copy-link" type="button" data-copy="{{ task.task_id }}" title="Copy full task ID">
+              <code>{{ task.task_id[:8] }}</code>
+            </button>
+          </td>
+          <td><a href="{{ url_for('agent_detail', agent_id=task.agent_id) }}">{{ task.agent_hostname or task.agent_id }}</a></td>
+          <td>{{ task.type }}</td>
+          <td><code>{{ task.value }}</code></td>
+          <td><span class="pill pill-{{ task.status }}">{{ task.status }}</span></td>
+          <td><span class="chip chip-source">{{ task.source_type }}</span></td>
+          <td>{{ task.attempt_number }}/{{ task.max_attempts }}</td>
+          <td class="muted" data-ts="{{ task.created_at }}">{{ task.created_at }}</td>
+          <td>
+            {% if task.status in ['running', 'pending'] %}
+            <form action="{{ url_for('kill_task', task_id=task.task_id) }}" method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button class="btn btn-small btn-danger" type="submit">Kill</button>
+            </form>
+            {% elif task.status in ['failed', 'killed', 'cancelled'] and can('task.retry') %}
+            <form action="{{ url_for('retry_task', task_id=task.task_id) }}" method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button class="btn btn-small btn-primary" type="submit">Retry</button>
+            </form>
+            {% else %}
+            <span class="muted">-</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty">No tasks yet. Open an agent to run the first task.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint filter-empty" data-filter-empty hidden>No tasks match the current filter.</p>
+</section>
+{% endblock %}

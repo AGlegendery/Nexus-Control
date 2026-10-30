@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card glass-card reveal">
+  <div class="agent-head">
+    <div class="agent-identity">
+      <div class="agent-title-row">
+        <h2 class="agent-name">{{ agent.hostname }}</h2>
+        <span class="pill pill-{{ agent.status }}">{{ agent.status }}</span>
+      </div>
+      <div class="agent-meta">
+        <span class="chip">ID <code>{{ agent.agent_id }}</code></span>
+        <span class="chip">OS {{ agent.os_family or '-' }}</span>
+        <span class="chip" data-ts="{{ agent.last_seen or '' }}" data-relative-prefix="Last seen ">{{ agent.last_seen or '-' }}</span>
+      </div>
+      <div class="agent-meta">
+        <span class="muted">{{ agent.platform or 'Platform not reported yet' }}</span>
+      </div>
+      <div class="row-actions agent-actions">
+        {% if can('shell.execute') %}
+        <a class="btn btn-small btn-primary" href="{{ url_for('shell_page', agent_id=agent.agent_id) }}">Open Direct Shell</a>
+        {% endif %}
+        <button class="btn btn-small btn-outline" type="button" data-copy="{{ agent.agent_id }}">Copy Agent ID</button>
+        {% if can('agent.manage') %}
+        <form action="{{ url_for('delete_agent', agent_id=agent.agent_id) }}" method="post" onsubmit="return confirm('Delete this agent and all related tasks?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button class="btn btn-small btn-danger" type="submit">Delete Agent</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="layout-2 reveal-delay">
+  <article class="card glass-card">
+    <div class="card-h">System Specifications</div>
+    {% if system_info %}
+    <div class="spec-grid">
+      <div><span class="label">Architecture</span><strong>{{ system_info.architecture or '-' }}</strong></div>
+      <div><span class="label">CPU</span><strong>{{ system_info.cpu_model or system_info.architecture or '-' }}</strong></div>
+      <div><span class="label">Logical CPUs</span><strong>{{ system_info.logical_cpu_count or '-' }}</strong></div>
+      <div><span class="label">Memory</span><strong>{{ '%.1f GB'|format(system_info.memory_total_bytes / 1073741824) if system_info.memory_total_bytes else '-' }}</strong></div>
+      <div><span class="label">Disk</span><strong>{{ '%.1f GB'|format(system_info.disk_total_bytes / 1073741824) if system_info.disk_total_bytes else '-' }}</strong></div>
+      <div><span class="label">Boot time</span><strong>{{ system_info.boot_time or '-' }}</strong></div>
+      <div><span class="label">Agent version</span><strong>{{ system_info.agent_version or '-' }}</strong></div>
+      <div><span class="label">Reported</span><strong>{{ system_info.reported_at or '-' }}</strong></div>
+    </div>
+    {% else %}
+    <div class="empty">Waiting for the agent to report its specifications.</div>
+    {% endif %}
+  </article>
+
+  <article class="card glass-card card-fill" id="agent-health-panel" data-health-url="{{ url_for('health_api') }}" data-agent-id="{{ agent.agent_id }}">
+    <div class="card-h">Live Health <span class="muted" id="agent-health-updated">Every 5 seconds</span></div>
+    {% if health_info %}
+    <div class="metric-row">
+      <span class="metric-chip"><strong data-health-field="cpu">{{ '%.1f'|format(health_info.cpu_percent) + '%' if health_info.cpu_percent is not none else '-' }}</strong> CPU</span>
+      <span class="metric-chip"><strong data-health-field="memory">{{ '%.1f'|format(health_info.memory_percent) + '%' if health_info.memory_percent is not none else '-' }}</strong> Memory</span>
+      <span class="metric-chip"><strong data-health-field="disk">{{ '%.1f'|format(health_info.disk_percent) + '%' if health_info.disk_percent is not none else '-' }}</strong> Disk</span>
+    </div>
+    <p class="muted" data-health-field="reported">Updated {{ health_info.reported_at or '-' }}</p>
+    {% else %}
+    <div class="empty">Waiting for the first health heartbeat.</div>
+    {% endif %}
+    {% for alert in alerts %}
+    <div class="alert alert-warning">{{ alert.message }}</div>
+    {% endfor %}
+  </article>
+</section>
+
+<section class="layout-2 reveal-delay">
+  {% if can('task.create') %}
+  <article class="card glass-card">
+    <div class="card-h">Dispatch to This Agent</div>
+    <form action="{{ url_for('create_task') }}" method="post" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <input type="hidden" name="agent_id" value="{{ agent.agent_id }}" />
+
+      <label class="label">Task Type</label>
+      <select class="input" id="task-type" name="task_type">
+        <option value="run_script">Run Script Library Item</option>
+        <option value="deploy_script">Transfer File Script to Agent</option>
+        <option value="run_agent_file">Run File Already on Agent</option>
+      </select>
+
+      <label class="label">Script ID (run/deploy)</label>
+      <select class="input" id="script-select" name="task_value">
+        {% for script in scripts %}
+        <option value="{{ script.script_id }}" data-script-kind="{{ script.script_kind }}">{{ script.script_id }} - {{ script.display_name }} ({{ script.script_kind }}, {{ script.platform_text }})</option>
+        {% endfor %}
+      </select>
+
+      <label class="label">Agent File Name</label>
+      <input class="input mono" name="agent_file_name" placeholder="maintenance.ps1" />
+
+      <label class="label">Timeout in Seconds (0 = unlimited)</label>
+      <input class="input" name="run_timeout_seconds" type="number" min="0" max="86400" value="180" />
+
+      <label class="label checkbox-row">
+        <input type="checkbox" name="run_allow_nonzero_success" />
+        Treat non-zero exit code as success (run_agent_file only)
+      </label>
+
+      <button class="btn btn-primary" type="submit">Queue Task</button>
+      <p class="hint">To run a command immediately, use the direct shell.</p>
+    </form>
+  </article>
+  {% else %}
+  <article class="card glass-card">
+    <div class="card-h">Dispatch to This Agent</div>
+    <div class="empty">Your role is read-only. Task creation requires the task.create permission.</div>
+  </article>
+  {% endif %}
+
+  <article class="card glass-card">
+    <div class="card-h">Agent Scripts Folder</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Path</th>
+            <th>Size</th>
+            <th>Modified</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for file in agent_files %}
+          <tr>
+            <td><code>{{ file.file_name }}</code></td>
+            <td><code>{{ file.rel_path }}</code></td>
+            <td>{{ file.file_size }} B</td>
+            <td class="muted" data-ts="{{ file.modified_at or '' }}">{{ file.modified_at or '-' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="empty">No files synced from this agent yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+
+<section class="card glass-card reveal-delay-2" data-filter-root>
+  <div class="card-head-row">
+    <div>
+      <div class="card-h">Task History</div>
+      <p class="hint">{{ tasks|length }} task{{ '' if tasks|length == 1 else 's' }} shown, newest first. Output is copied per task.</p>
+    </div>
+    <div class="toolbar">
+      <input class="input input-search" type="search" placeholder="Search task, type, or value..." data-filter-text aria-label="Search task history" />
+      <select class="input input-compact" data-filter-attr="status" aria-label="Filter tasks by status">
+        <option value="">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="running">Running</option>
+        <option value="completed">Completed</option>
+        <option value="failed">Failed</option>
+        <option value="killed">Killed</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="task-list">
+    {% for task in tasks %}
+    <article
+      class="task-card"
+      data-filter-row
+      data-status="{{ task.status }}"
+      data-task-card="{{ task.task_id }}"
+      data-search="{{ (task.task_id ~ ' ' ~ task.type ~ ' ' ~ task.value ~ ' ' ~ task.status ~ ' ' ~ (task.output or '') ~ ' ' ~ (task.error or ''))|lower }}"
+    >
+      <header class="task-card-head">
+        <div class="task-card-title">
+          <button class="copy-link" type="button" data-copy="{{ task.task_id }}" title="Copy full task ID">
+            <code>{{ task.task_id[:8] }}</code>
+          </button>
+          <span class="pill pill-{{ task.status }}" data-task-status>{{ task.status }}</span>
+          <span class="chip chip-source">{{ task.type }}</span>
+          <span class="chip chip-source">{{ task.source_type }}</span>
+        </div>
+        <div class="task-card-meta">
+          <span class="muted" data-ts="{{ task.created_at }}">{{ task.created_at }}</span>
+          <span class="muted">attempt {{ task.attempt_number }}/{{ task.max_attempts }}</span>
+          {% if can('task.kill') %}
+          <form action="{{ url_for('kill_task', task_id=task.task_id) }}" method="post" data-task-kill {% if task.status not in ['running', 'pending'] %}hidden{% endif %}>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button class="btn btn-small btn-danger" type="submit">Kill</button>
+          </form>
+          {% endif %}
+          {% if can('task.retry') %}
+          <form action="{{ url_for('retry_task', task_id=task.task_id) }}" method="post" data-task-retry {% if task.status not in ['failed', 'killed', 'cancelled'] %}hidden{% endif %}>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button class="btn btn-small btn-primary" type="submit">Retry</button>
+          </form>
+          {% endif %}
+        </div>
+      </header>
+
+      <div class="task-command">
+        <span class="label">Value</span>
+        <code>{{ task.value }}</code>
+      </div>
+
+      {% if task.status in ['pending', 'running'] %}
+      <div
+        class="output-block output-block-live"
+        data-live-task="{{ task.task_id }}"
+        data-live-attempt="{{ task.attempt_number }}"
+      >
+        <div class="output-head">
+          <button class="btn btn-small btn-outline" type="button" data-copy-target="live-out-{{ task.task_id }}">Copy output</button>
+          <span class="output-label">stdout</span>
+          <span class="live-pulse{{ ' is-pending' if task.status == 'pending' else '' }}" data-live-state>{{ 'Queued' if task.status == 'pending' else 'Live' }}</span>
+          <span class="output-meta" data-live-meta="stdout">0 chars</span>
+        </div>
+        <pre class="output-pre" id="live-out-{{ task.task_id }}" data-live-pre="stdout">{% if task.status == 'pending' %}Waiting for the agent...{% endif %}</pre>
+      </div>
+      <div class="output-block output-block-error" data-live-error hidden>
+        <div class="output-head">
+          <button class="btn btn-small btn-outline" type="button" data-copy-target="live-err-{{ task.task_id }}">Copy error</button>
+          <span class="output-label">stderr</span>
+          <span class="output-meta" data-live-meta="stderr">0 chars</span>
+        </div>
+        <pre class="output-pre" id="live-err-{{ task.task_id }}" data-live-pre="stderr"></pre>
+      </div>
+      {% else %}
+      <div class="output-block">
+        <div class="output-head">
+          {% if task.output %}
+          <button class="btn btn-small btn-outline" type="button" data-copy-target="output-{{ task.task_id }}">Copy output</button>
+          {% endif %}
+          <span class="output-label">stdout</span>
+          <span class="output-meta">{{ (task.output or '')|length }} chars</span>
+        </div>
+        <pre class="output-pre" id="output-{{ task.task_id }}">{% if task.output %}{{ task.output }}{% else %}(no output captured){% endif %}</pre>
+      </div>
+
+      {% if task.error %}
+      <div class="output-block output-block-error">
+        <div class="output-head">
+          <button class="btn btn-small btn-outline" type="button" data-copy-target="error-{{ task.task_id }}">Copy error</button>
+          <span class="output-label">stderr</span>
+          <span class="output-meta">{{ (task.error or '')|length }} chars</span>
+        </div>
+        <pre class="output-pre" id="error-{{ task.task_id }}">{{ task.error }}</pre>
+      </div>
+      {% endif %}
+      {% endif %}
+    </article>
+    {% else %}
+    <div class="empty">No tasks for this agent yet. Use the dispatch form above or the direct shell.</div>
+    {% endfor %}
+  </div>
+  <p class="hint filter-empty" data-filter-empty hidden>No tasks match the current filter.</p>
+</section>
+{% endblock %}

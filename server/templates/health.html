@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% set page_title = "Agent Health - Control Nexus" %}
+
+{% block content %}
+<section class="stats-grid reveal">
+  <article class="card stat-card"><div class="stat-k">Agents</div><div class="stat-v" id="health-agent-count">{{ agents|length }}</div></article>
+  <article class="card stat-card"><div class="stat-k">Open Alerts</div><div class="stat-v" id="health-alert-count">{{ alerts|length }}</div></article>
+</section>
+
+<section class="card glass-card reveal-delay" id="health-live-panel" data-health-url="{{ url_for('health_api') }}">
+  <div class="card-h">Agent Health <span class="muted" id="health-last-updated">Live updates every 5 seconds</span></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Agent</th><th>Status</th><th>CPU</th><th>Memory</th><th>Disk</th><th>Reported</th><th>Specs</th></tr></thead>
+      <tbody id="health-agent-rows">
+        {% for agent in agents %}
+        <tr data-agent-id="{{ agent.agent_id }}">
+          <td><a href="{{ url_for('agent_detail', agent_id=agent.agent_id) }}">{{ agent.hostname }}</a></td>
+          <td><span class="pill pill-{{ agent.status }}" data-health-field="status">{{ agent.status }}</span></td>
+          <td data-health-field="cpu">{{ '%.1f'|format(agent.cpu_percent) + '%' if agent.cpu_percent is not none else '-' }}</td>
+          <td data-health-field="memory">{{ '%.1f'|format(agent.memory_percent) + '%' if agent.memory_percent is not none else '-' }}</td>
+          <td data-health-field="disk">{{ '%.1f'|format(agent.disk_percent) + '%' if agent.disk_percent is not none else '-' }}</td>
+          <td class="muted" data-health-field="reported">{{ agent.reported_at or '-' }}</td>
+          <td class="muted" data-health-field="specs">{{ agent.architecture or '-' }} · {{ agent.logical_cpu_count or '-' }} CPUs</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No agents registered.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card glass-card reveal-delay-2">
+  <div class="card-h">Open Health Alerts</div>
+  <div class="alert-list">
+    {% for alert in alerts %}
+    <div class="alert alert-warning alert-row">
+      <div><strong>{{ alert.hostname }}</strong><div>{{ alert.message }}</div><span class="muted">{{ alert.opened_at }}</span></div>
+      {% if can('health.manage') %}
+      <form action="{{ url_for('acknowledge_health_alert', alert_id=alert.alert_id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><button class="btn btn-small btn-outline" type="submit">Acknowledge</button></form>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="empty">No open health alerts.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

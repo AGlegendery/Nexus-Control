@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="layout-2 reveal">
+  <article class="card glass-card">
+    <div class="card-h">Security Settings</div>
+    <p class="muted">Change the dashboard login password for <code>{{ admin_username }}</code>.</p>
+
+    <form method="post" action="{{ url_for('change_password') }}" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label class="label">Current Password</label>
+      <input class="input" type="password" name="current_password" autocomplete="current-password" required />
+
+      <label class="label">New Password</label>
+      <input class="input" type="password" name="new_password" autocomplete="new-password" minlength="10" required />
+
+      <label class="label">Confirm New Password</label>
+      <input class="input" type="password" name="confirm_password" autocomplete="new-password" minlength="10" required />
+
+      <button class="btn btn-primary" type="submit">Update Password</button>
+    </form>
+  </article>
+
+  <article class="card glass-card">
+    <div class="card-h">Interface Preferences</div>
+    <p class="hint">Saved in this browser only. They do not change server behavior.</p>
+
+    <div class="settings-row">
+      <div>
+        <strong>Live agent status</strong>
+        <span class="hint">Refresh the dashboard agent table every 20 seconds.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="pref-live-agents" />
+        <span class="switch-track"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div>
+        <strong>Relative timestamps</strong>
+        <span class="hint">Show "5m ago" next to the exact time.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="pref-relative-time" />
+        <span class="switch-track"></span>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <div>
+        <strong>Compact density</strong>
+        <span class="hint">Tighter rows for large fleets.</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="pref-compact" />
+        <span class="switch-track"></span>
+      </label>
+    </div>
+  </article>
+</section>
+
+<section class="card glass-card reveal-delay">
+  <div class="card-h">Operational Limits</div>
+  <div class="spec-grid">
+    <div><span class="label">Upload limit</span><strong>{{ limits.upload_mb }} MB</strong></div>
+    <div><span class="label">API rate limit</span><strong>{{ limits.rate_limit if limits.rate_limit else 'disabled' }}{% if limits.rate_limit %} / min{% endif %}</strong></div>
+    <div><span class="label">Agent offline after</span><strong>{{ limits.offline_after }} s</strong></div>
+    <div><span class="label">Scheduler interval</span><strong>{{ limits.scheduler_interval }} s</strong></div>
+  </div>
+  <p class="hint">These values come from the server environment and require a restart to change.</p>
+</section>
+{% endblock %}

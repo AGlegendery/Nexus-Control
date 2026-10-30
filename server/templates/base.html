@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="csrf-token" content="{{ csrf_token() }}" />
+  <title>{{ page_title or 'Control Nexus' }}</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b121e'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%2335e0c0'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+
+  {% if session.get('admin_authenticated') or session.get('user_id') %}
+  <div class="app-shell" id="appShell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-wrap">
+        <div class="logo-dot"></div>
+        <div>
+          <a class="brand" href="{{ url_for('dashboard') }}">Control Nexus</a>
+          <div class="brand-sub">Remote Task Manager</div>
+        </div>
+      </div>
+
+      <nav class="side-nav">
+        <a class="nav-link {{ 'is-active' if request.endpoint == 'dashboard' }}" href="{{ url_for('dashboard') }}">
+          <span class="nav-ico">&#9632;</span> Dashboard
+        </a>
+        <a class="nav-link {{ 'is-active' if request.endpoint in ['health_page', 'agent_detail'] }}" href="{{ url_for('health_page') }}">
+          <span class="nav-ico">&#9829;</span> Health
+        </a>
+        {% if can('group.manage') %}
+        <a class="nav-link {{ 'is-active' if request.endpoint == 'agent_groups' }}" href="{{ url_for('agent_groups') }}">
+          <span class="nav-ico">&#9635;</span> Groups
+        </a>
+        {% endif %}
+        {% if can('schedule.manage') %}
+        <a class="nav-link {{ 'is-active' if request.endpoint == 'schedules' }}" href="{{ url_for('schedules') }}">
+          <span class="nav-ico">&#9200;</span> Schedules
+        </a>
+        {% endif %}
+        {% if can('script.manage') %}
+        <a class="nav-link {{ 'is-active' if request.endpoint in ['upload_page', 'script_editor'] }}" href="{{ url_for('upload_page') }}">
+          <span class="nav-ico">&#8679;</span> Scripts
+        </a>
+        {% endif %}
+        {% if can('agent.manage') %}
+        <a class="nav-link {{ 'is-active' if request.endpoint in ['agent_download_page', 'agent_download'] }}" href="{{ url_for('agent_download_page') }}">
+          <span class="nav-ico">&#8681;</span> Deploy Agent
+        </a>
+        {% endif %}
+        {% if can('audit.view') %}
+        <a class="nav-link {{ 'is-active' if request.endpoint == 'audit_page' }}" href="{{ url_for('audit_page') }}">
+          <span class="nav-ico">&#9776;</span> Audit
+        </a>
+        {% endif %}
+        {% if can('user.manage') %}
+        <a class="nav-link {{ 'is-active' if request.endpoint == 'users_roles' }}" href="{{ url_for('users_roles') }}">
+          <span class="nav-ico">&#9787;</span> Users
+        </a>
+        {% endif %}
+        <a class="nav-link {{ 'is-active' if request.endpoint == 'settings_page' }}" href="{{ url_for('settings_page') }}">
+          <span class="nav-ico">&#9881;</span> Settings
+        </a>
+      </nav>
+
+      <div class="sidebar-foot">
+        <span class="chip">{{ session.get('admin_username', 'admin') }}</span>
+        <span class="chip chip-role">{{ current_role or 'admin' }}</span>
+      </div>
+    </aside>
+
+    <div class="nav-scrim" id="navScrim" aria-hidden="true"></div>
+
+    <div class="main-col">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="nav-toggle" id="navToggle" type="button" aria-label="Toggle navigation">&#9776;</button>
+          <span class="topbar-title">{{ page_title or 'Control Nexus' }}</span>
+        </div>
+        <div class="topbar-actions">
+          <a class="btn btn-ghost" href="{{ url_for('dashboard') }}">Home</a>
+          <a class="btn btn-ghost" href="{{ url_for('health_page') }}">Health</a>
+          <form method="post" action="{{ url_for('logout') }}" data-no-async>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button class="btn btn-ghost" type="submit">Log Out</button>
+          </form>
+        </div>
+      </header>
+
+      <main class="page-wrap">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+          <section class="alerts">
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </section>
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  {% else %}
+  <main class="page-wrap auth-wrap">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <section class="alerts">
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </section>
+      {% endif %}
+    {% endwith %}
+    {{ self.content() }}
+  </main>
+  {% endif %}
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+    (function () {
+      var toggle = document.getElementById('navToggle');
+      var scrim = document.getElementById('navScrim');
+      function setNav(open) {
+        document.body.classList.toggle('nav-open', open);
+        if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+      if (toggle) {
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.addEventListener('click', function () {
+          setNav(!document.body.classList.contains('nav-open'));
+        });
+      }
+      if (scrim) scrim.addEventListener('click', function () { setNav(false); });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') setNav(false);
+      });
+      document.querySelectorAll('.side-nav .nav-link').forEach(function (link) {
+        link.addEventListener('click', function () { setNav(false); });
+      });
+      window.addEventListener('resize', function () {
+        if (window.innerWidth > 980) setNav(false);
+      });
+    })();
+  </script>
+</body>
+</html>

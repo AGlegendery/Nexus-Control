@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="login-shell">
+  <article class="card glass-card login-card reveal">
+    <div class="login-title">Admin Access</div>
+    <p class="muted">Sign in to access the Control Nexus dashboard.</p>
+
+    <form method="post" class="form-grid" data-no-warn data-no-async>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label class="label" for="username">Username</label>
+      <input class="input" id="username" name="username" type="text" autocomplete="username" required />
+
+      <label class="label" for="password">Password</label>
+      <input class="input" id="password" name="password" type="password" autocomplete="current-password" required />
+
+      <button class="btn btn-primary" type="submit">Sign In</button>
+    </form>
+
+    <p class="hint">Tip: set `ADMIN_PASSWORD_HASH` in `server/.env` for production.</p>
+  </article>
+</section>
+{% endblock %}

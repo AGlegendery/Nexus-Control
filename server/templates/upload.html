@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card glass-card reveal">
+  <div class="card-head-row">
+    <div>
+      <div class="card-h">Scripts</div>
+      <p class="hint">Command scripts and uploaded files are stored here, then run or transferred from an agent page.</p>
+    </div>
+    <div class="toolbar">
+      <a class="btn btn-small btn-primary" href="{{ url_for('script_editor') }}">New Script</a>
+      <a class="btn btn-small btn-outline" href="#upload-form">Upload Binary</a>
+    </div>
+  </div>
+</section>
+
+<section class="card glass-card reveal-delay" data-filter-root>
+  <div class="card-head-row">
+    <div>
+      <div class="card-h">Script Library</div>
+      <p class="hint">{{ scripts|length }} item{{ '' if scripts|length == 1 else 's' }} available. Click an ID to copy it.</p>
+    </div>
+    <div class="toolbar">
+      <input class="input input-search" type="search" placeholder="Search ID, name, or file..." data-filter-text aria-label="Search scripts" />
+      <select class="input input-compact" data-filter-attr="kind" aria-label="Filter scripts by kind">
+        <option value="">All kinds</option>
+        <option value="command">Command</option>
+        <option value="file">File</option>
+      </select>
+      <select class="input input-compact" data-filter-attr="platform" data-filter-match="token" aria-label="Filter scripts by platform">
+        <option value="">All platforms</option>
+        <option value="windows">Windows</option>
+        <option value="linux">Linux</option>
+        <option value="macos">macOS</option>
+      </select>
+      <select class="input input-compact" data-filter-attr="enabled" aria-label="Filter scripts by state">
+        <option value="">All states</option>
+        <option value="1">Enabled</option>
+        <option value="0">Disabled</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Kind</th>
+          <th>Platform</th>
+          <th>File</th>
+          <th>Timeout</th>
+          <th>State</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for script in scripts %}
+        <tr
+          data-filter-row
+          data-kind="{{ script.script_kind }}"
+          data-platform="{{ script.platform_attr }}"
+          data-enabled="{{ 1 if script.enabled else 0 }}"
+          data-search="{{ (script.script_id ~ ' ' ~ script.display_name ~ ' ' ~ (script.description or '') ~ ' ' ~ (script.file_name or '') ~ ' ' ~ script.script_kind ~ ' ' ~ script.platform_text)|lower }}"
+        >
+          <td>
+            <button class="copy-link" type="button" data-copy="{{ script.script_id }}" title="Copy script ID">
+              <code>{{ script.script_id }}</code>
+            </button>
+          </td>
+          <td>
+            <span class="row-title">{{ script.display_name }}</span>
+            {% if script.description %}<div class="row-sub">{{ script.description }}</div>{% endif %}
+          </td>
+          <td><span class="chip chip-source">{{ script.script_kind }}</span></td>
+          <td>
+            <span class="os-tags">
+              {% for chip in script.platform_chips %}
+              <span class="os-tag os-tag-{{ chip.key }}">{{ chip.label }}</span>
+              {% endfor %}
+            </span>
+          </td>
+          <td><code>{{ script.file_name or '-' }}</code></td>
+          <td>{{ script.timeout_seconds }}s</td>
+          <td><span class="pill {{ 'pill-online' if script.enabled else 'pill-offline' }}">{{ 'enabled' if script.enabled else 'disabled' }}</span></td>
+          <td>
+            <div class="row-actions">
+              <a class="btn btn-small btn-outline" href="{{ url_for('script_editor', script_id=script.script_id) }}">Edit</a>
+              <form action="{{ url_for('toggle_script', script_id=script.script_id) }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button class="btn btn-small {{ 'btn-danger' if script.enabled else 'btn-primary' }}" type="submit">
+                  {{ 'Disable' if script.enabled else 'Enable' }}
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="empty">
+            The library is empty. Create a command script or upload a file to get started.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint filter-empty" data-filter-empty hidden>No scripts match the current filter.</p>
+</section>
+
+<section class="layout-2 reveal-delay-2">
+  <article class="card glass-card" id="upload-page-upload">
+    <div class="card-h">Upload New File Script</div>
+    <p class="hint">Large binaries are supported up to {{ upload_limit_mb }} MB. Uploads are verified with SHA-256.</p>
+    <form id="upload-form" class="form-grid" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label class="label">Script ID</label>
+      <input class="input" name="script_id" placeholder="ex: setup_agent_exe" required />
+
+      <label class="label">Display Name</label>
+      <input class="input" name="display_name" placeholder="Agent Setup Binary" required />
+
+      <label class="label">Description</label>
+      <textarea class="input" name="description" rows="2" placeholder="What this file does"></textarea>
+
+      <label class="label">File Name on Agent</label>
+      <input class="input mono" name="file_name" placeholder="setup.exe" />
+
+      <label class="label">Upload File</label>
+      <input id="script-upload-input" class="input" type="file" name="script_upload" required />
+
+      <label class="label">Timeout in Seconds (0 = unlimited)</label>
+      <input class="input" name="timeout_seconds" type="number" min="0" max="86400" value="120" required />
+
+      <label class="label checkbox-row">
+        <input type="checkbox" name="allow_nonzero_success" />
+        Treat non-zero exit code as success
+      </label>
+
+      <div class="upload-progress-wrap">
+        <div class="upload-progress-label">
+          <span id="upload-progress-text">Waiting for upload...</span>
+          <span id="upload-progress-percent">0%</span>
+        </div>
+        <progress id="upload-progress-bar" value="0" max="100"></progress>
+      </div>
+
+      <button id="upload-submit-btn" class="btn btn-primary" type="submit">Upload Script File</button>
+    </form>
+  </article>
+
+  <article class="card glass-card">
+    <div class="card-h">Upload Diagnostics</div>
+    <p class="hint">Storage, limits, and checksums for recent uploads.</p>
+    <div id="upload-debug-summary" class="debug-summary">
+      Loading summary...
+    </div>
+    <button id="refresh-debug-btn" class="btn btn-outline" type="button">Refresh Summary</button>
+  </article>
+</section>
+{% endblock %}

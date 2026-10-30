@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% set page_title = "Users and Roles - Control Nexus" %}
+
+{% block content %}
+<section class="layout-2 reveal">
+  <article class="card glass-card">
+    <div class="card-h">Create User</div>
+    <form action="{{ url_for('users_roles') }}" method="post" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label class="label">Username</label>
+      <input class="input" name="username" autocomplete="off" required />
+      <label class="label">Temporary Password</label>
+      <input class="input" name="password" type="password" minlength="10" required />
+      <label class="label">Role</label>
+      <select class="input" name="role">
+        {% for role in roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary" type="submit">Create User</button>
+    </form>
+  </article>
+  <article class="card glass-card">
+    <div class="card-h">Role Capabilities</div>
+    <div class="role-list">
+      <div><strong>Admin</strong><span>Full control, users, roles, and security settings.</span></div>
+      <div><strong>Operator</strong><span>Manage agents, groups, schedules, scripts, and tasks.</span></div>
+      <div><strong>Viewer</strong><span>Read-only dashboard, health, and audit access.</span></div>
+    </div>
+  </article>
+</section>
+
+<section class="card glass-card reveal-delay">
+  <div class="card-h">Users</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Last Login</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td>{{ user.username }}</td>
+          <td><span class="pill pill-pending">{{ user.role }}</span></td>
+          <td><span class="pill {{ 'pill-online' if user.enabled else 'pill-offline' }}">{{ 'enabled' if user.enabled else 'disabled' }}</span></td>
+          <td class="muted">{{ user.last_login_at or '-' }}</td>
+          <td><form action="{{ url_for('toggle_user', user_id=user.user_id) }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><button class="btn btn-small {{ 'btn-danger' if user.enabled else 'btn-primary' }}" type="submit">{{ 'Disable' if user.enabled else 'Enable' }}</button></form></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

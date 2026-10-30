@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="layout-2 reveal">
+  <article class="card glass-card">
+    <div class="card-h">Build a configured agent</div>
+    <p class="muted">The downloaded <code>agent.py</code> already embeds the server URL and registration token, so the agent registers itself on first run without editing any files.</p>
+
+    {% if config_error %}<div class="alert alert-warning">{{ config_error }}</div>{% endif %}
+    {% if token_is_placeholder %}<div class="alert alert-warning">This server is still using the default registration token. Set <code>REGISTER_TOKEN</code> in the environment before handing agents out.</div>{% endif %}
+    {% if insecure_url %}<div class="alert alert-warning">Plain HTTP sends the registration token unencrypted. Use HTTPS unless the agent runs on the same machine.</div>{% endif %}
+
+    <form method="get" action="{{ url_for('agent_download_page') }}" class="form-grid" id="agentForm" data-async-get>
+      <label class="label" for="agent-server-url">Server URL</label>
+      <input class="input" id="agent-server-url" name="url" type="url" value="{{ server_url }}" placeholder="https://your-app.up.railway.app" required />
+      <p class="hint">Public address of this panel. Agents poll outbound, so no static IP or open inbound port is needed.</p>
+
+      <label class="label" for="agent-poll">Poll interval (seconds)</label>
+      <input class="input" id="agent-poll" name="poll" type="number" min="1" max="3600" value="{{ poll_seconds }}" required />
+
+      <label class="label checkbox-row">
+        <input id="agent-ssl" type="checkbox" name="ssl" value="1" {% if verify_ssl %}checked{% endif %} />
+        Verify HTTPS certificates
+      </label>
+      <p class="hint">Disable only for self-signed certificates.</p>
+
+      <div class="toolbar">
+        <button class="btn btn-ghost" type="submit">Refresh preview</button>
+        <a class="btn btn-primary" id="agentDownload" download="agent.py" href="{{ url_for('agent_download', url=server_url, poll=poll_seconds, ssl='1' if verify_ssl else '0') }}">Download agent.py</a>
+      </div>
+    </form>
+  </article>
+
+  <article class="card glass-card">
+    <div class="card-h">Deployment summary</div>
+    <div class="spec-grid">
+      <div><span class="label">Server URL</span><strong>{{ server_url }}</strong></div>
+      <div><span class="label">Registration token</span><strong>{{ register_token_masked }}</strong></div>
+      <div><span class="label">Poll interval</span><strong>{{ poll_seconds }} s</strong></div>
+      <div><span class="label">Source</span><strong>{{ agent_source_name }} &middot; {{ agent_line_count }} lines</strong></div>
+    </div>
+
+    <ol class="muted deploy-steps">
+      <li>Copy the downloaded <code>agent.py</code> to the target machine.</li>
+      <li>Install Python 3.10+ and run <code>pip install requests</code>.</li>
+      <li>Start it with <code>python agent.py</code> and confirm the agent appears on the dashboard.</li>
+    </ol>
+    <p class="hint">To ship a standalone Windows executable instead, run <code>pyinstaller --onefile agent.py</code> next to the downloaded file.</p>
+  </article>
+</section>
+
+<section class="card glass-card reveal-delay">
+  <div class="card-head-row">
+    <div>
+      <div class="card-h">Embedded agent.py</div>
+      <p class="hint">Preview of the exact file that will be downloaded. Use the form above to change the profile, then refresh.</p>
+    </div>
+    <div class="toolbar">
+      <button class="btn btn-small btn-ghost" type="button" data-copy-target="agentSource">Copy source</button>
+    </div>
+  </div>
+  <pre class="agent-code" id="agentSource">{{ agent_source }}</pre>
+</section>
+{% endblock %}

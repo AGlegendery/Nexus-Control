@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% set page_title = "Audit Log - Control Nexus" %}
+
+{% block content %}
+<section class="card glass-card reveal">
+  <div class="card-h">Audit Log</div>
+  <p class="muted">Administrative actions, agent events, task lifecycle events, and schedule dispatches. Secrets and payloads are not recorded.</p>
+</section>
+<section class="card glass-card reveal-delay">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Resource</th><th>Result</th><th>Address</th></tr></thead>
+      <tbody>
+        {% for entry in entries %}
+        <tr>
+          <td class="muted">{{ entry.occurred_at }}</td>
+          <td>{{ entry.actor_type }}{% if entry.actor_id %}<br /><code>{{ entry.actor_id }}</code>{% endif %}</td>
+          <td><code>{{ entry.action }}</code></td>
+          <td>{{ entry.resource_type or '-' }}{% if entry.resource_id %}<br /><code>{{ entry.resource_id }}</code>{% endif %}</td>
+          <td><span class="pill {{ 'pill-online' if entry.success else 'pill-failed' }}">{{ 'ok' if entry.success else 'error' }}</span></td>
+          <td class="muted">{{ entry.remote_address or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No audit entries yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

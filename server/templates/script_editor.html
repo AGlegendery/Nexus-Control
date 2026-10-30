@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card glass-card reveal">
+  <div class="card-h">Script Editor</div>
+  <p class="muted">Create or edit command/file scripts. Timeout supports <code>0</code> for unlimited runtime.</p>
+  <p class="muted">For large binaries like <code>.exe</code>, use the dedicated <a href="{{ url_for('upload_page') }}">Uploads page</a>.</p>
+  {% if script %}
+  <p class="muted">Target platforms:
+    <span class="os-tags">
+      {% for chip in script.platform_chips %}
+      <span class="os-tag os-tag-{{ chip.key }}">{{ chip.label }}</span>
+      {% endfor %}
+    </span>
+  </p>
+  {% endif %}
+</section>
+
+<section class="layout-2 reveal-delay{{ ' is-single' if script and script.script_kind else '' }}">
+  {% if not script or script.script_kind == 'command' %}
+  <article class="card glass-card">
+    <div class="card-h">Command Script</div>
+    <form action="{{ url_for('save_script') }}" method="post" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label class="label">Script ID</label>
+      <input class="input" name="script_id" value="{{ script.script_id if script else '' }}" placeholder="ex: restart_service" required />
+
+      <label class="label">Display Name</label>
+      <input class="input" name="display_name" value="{{ script.display_name if script else '' }}" placeholder="Human readable name" required />
+
+      <label class="label">Description</label>
+      <textarea class="input" name="description" rows="2" placeholder="What this does">{{ script.description if script else '' }}</textarea>
+
+      <label class="label">Windows Command</label>
+      <textarea class="input mono" name="windows_command" rows="2" placeholder="powershell -Command \"...\"">{{ script.windows_command if script and script.script_kind == 'command' else '' }}</textarea>
+
+      <label class="label">Linux Command</label>
+      <textarea class="input mono" name="linux_command" rows="2" placeholder="systemctl restart ...">{{ script.linux_command if script and script.script_kind == 'command' else '' }}</textarea>
+
+      <label class="label">macOS Command</label>
+      <textarea class="input mono" name="darwin_command" rows="2" placeholder="osascript ...">{{ script.darwin_command if script and script.script_kind == 'command' else '' }}</textarea>
+
+      <label class="label">Timeout in Seconds (0 = unlimited)</label>
+      <input class="input" name="timeout_seconds" type="number" min="0" max="86400" value="{{ script.timeout_seconds if script else 120 }}" required />
+
+      <label class="label checkbox-row">
+        <input type="checkbox" name="allow_nonzero_success" {% if script and script.allow_nonzero_success %}checked{% endif %} />
+        Treat non-zero exit code as success
+      </label>
+
+      <button class="btn btn-primary" type="submit">Save Command Script</button>
+    </form>
+  </article>
+  {% endif %}
+
+  {% if not script or script.script_kind == 'file' %}
+  <article class="card glass-card">
+    <div class="card-h">File Script</div>
+    <form action="{{ url_for('save_file_script') }}" method="post" enctype="multipart/form-data" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <label class="label">Script ID</label>
+      <input class="input" name="script_id" value="{{ script.script_id if script else '' }}" placeholder="ex: maintenance_ps1" required />
+
+      <label class="label">Display Name</label>
+      <input class="input" name="display_name" value="{{ script.display_name if script else '' }}" placeholder="Human readable name" required />
+
+      <label class="label">Description</label>
+      <textarea class="input" name="description" rows="2" placeholder="What this script does">{{ script.description if script else '' }}</textarea>
+
+      {% if script and script.binary_content %}
+      <div class="alert alert-warning">This file is not UTF-8 text. Upload the original file again to edit it.</div>
+      {% endif %}
+      <label class="label">Script File Name (.bat/.vbs/.ps1/.sh/...)</label>
+      <input class="input mono" name="file_name" value="{{ script.file_name if script else '' }}" placeholder="example.ps1" />
+
+      <label class="label">Upload Local Script File (optional)</label>
+      <input class="input" type="file" name="script_upload" />
+
+      <label class="label">Script Content (used if upload not provided)</label>
+      <textarea class="input mono" name="script_content" rows="8" placeholder="Write your script code here...">{{ script.script_content if script and script.script_kind == 'file' else '' }}</textarea>
+
+      <label class="label">Timeout in Seconds (0 = unlimited)</label>
+      <input class="input" name="timeout_seconds" type="number" min="0" max="86400" value="{{ script.timeout_seconds if script else 120 }}" required />
+
+      <label class="label checkbox-row">
+        <input type="checkbox" name="allow_nonzero_success" {% if script and script.allow_nonzero_success %}checked{% endif %} />
+        Treat non-zero exit code as success
+      </label>
+
+      <button class="btn btn-primary" type="submit">Save File Script</button>
+    </form>
+  </article>
+  {% endif %}
+</section>
+{% endblock %}
